@@ -7,6 +7,9 @@ name = "pypi"
 requests = "*"
 beautifulsoup4 = "*"
 dateparser = "*"
+pip = "*"
+ipykernel = "*"
+pandas = "*"
 
 [dev-packages]
 
