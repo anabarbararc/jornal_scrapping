@@ -4,6 +4,9 @@ from bs4 import BeautifulSoup as bs
 
 links_acessados = []
 
+HOST = "https://liberal.com.br"
+lenHOST = len(HOST)
+
 def get_all_links(str_page):
     '''
     This function takes all links from a page
@@ -18,35 +21,41 @@ def get_all_links(str_page):
 
     return links
 
-async def look_for_sites(session, site, prof=0):
+async def look_for_sites(session, site, sem, prof=0):
 
-    async with session.get(site) as response:
+    #Block semaphore
+    #await sem.acquire()
+    async with sem:
+        async with session.get(site) as response:
 
-        texto = await response.text()
+            texto = await response.text()
 
-        links = [ link for link in get_all_links(texto)
-            if link[:20] == "https://g1.globo.com"]
-        
-        if prof <= 3:
-            i = 1
-            for link in links:
-                if i > 3:
-                    break
-                if link not in links_acessados:
-                    links_acessados.append(link)
-                    n_prof = prof + 1
-                    await look_for_sites(session, link, prof=n_prof)
-                    i = i + 1
+            links = [ link for link in get_all_links(texto)
+                if link[:lenHOST] == HOST]
+            
+            if prof <= 3:
+                i = 1
+                for link in links:
+                    if i > 3:
+                        break
+                    if link not in links_acessados:
+                        links_acessados.append(link)
+                        n_prof = prof + 1
+                        await look_for_sites(session, link, sem, prof=n_prof)
+                        i = i + 1
 
-        print(f"{site}\t{texto[:15]}")
-        links_acessados.append(site)
+            print(f"{site}\t{texto[:15]}")
+            links_acessados.append(site)
+   # sem.release()
+
 async def main(site):
     links_acessados.append(site) 
+    sem = asyncio.Semaphore(10)
     async with aiohttp.ClientSession() as session:
-        await look_for_sites(session, site)
+        await look_for_sites(session, site, sem)
 
 if __name__ == "__main__":
 
-    site = "http://www.g1.com.br"
+    site = HOST
 
     asyncio.run(main(site))
