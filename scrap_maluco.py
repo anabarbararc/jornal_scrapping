@@ -15,31 +15,41 @@ def get_all_links(str_page):
 
     links = set(tag.get("href") for tag in link_tags 
         if tag.get("href"))
+    #weeklyreport = set(tag.get("h1") for tag in link_tags 
+    #    if tag.get("h1"))
 
     return links
+
 
 async def look_for_sites(session, site, prof=0):
 
     async with session.get(site) as response:
 
         texto = await response.text()
-
-        links = [ link for link in get_all_links(texto)
-            if link[:20] == "https://g1.globo.com"]
-        
-        if prof <= 3:
+        #print(get_all_links(texto))
+        links = [link for link in get_all_links(texto)]
+        [links_acessados.append(f"https://www.latinnews.com/{link}") for link in get_all_links(texto)]
+            #if link[:11] == "'/component"]
+        #print(links)
+        if prof <= 2:
             i = 1
             for link in links:
-                if i > 3:
+                if i > 2:
                     break
                 if link not in links_acessados:
-                    links_acessados.append(link)
+                    links_acessados.append(f"https://www.latinnews.com/{link}")
                     n_prof = prof + 1
-                    await look_for_sites(session, link, prof=n_prof)
+                    await look_for_sites(session, f"https://www.latinnews.com/{link}", prof=n_prof)
                     i = i + 1
 
-        print(f"{site}\t{texto[:15]}")
+        #print(f"{site}\t{texto[:30]}")
         links_acessados.append(site)
+        with open("links.csv", 'w') as filehandle:
+            for item in links_acessados:
+                filehandle.write(f'{item}\n')
+
+        print(links_acessados)
+
 async def main(site):
     links_acessados.append(site) 
     async with aiohttp.ClientSession() as session:
@@ -47,6 +57,6 @@ async def main(site):
 
 if __name__ == "__main__":
 
-    site = "http://www.g1.com.br"
+    site = "https://www.latinnews.com/component/k2/itemlist/category/33.html?archive=true&archive_id=33&period=2021"
 
     asyncio.run(main(site))
