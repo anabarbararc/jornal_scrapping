@@ -3,6 +3,7 @@ import aiohttp
 from bs4 import BeautifulSoup as bs
 import pandas as pd
 import requests
+from tqdm import tqdm 
 pd.options.display.max_colwidth = 150
 
 links_acessados = []
@@ -11,69 +12,64 @@ def get_all_links(str_page):
     '''
     This function takes all links from a page
     '''
-
     soup = bs(str_page, features="html.parser")
-
     link_tags = soup.find_all("a")
-
     links = set(tag.get("href") for tag in link_tags 
         if tag.get("href"))
-
     return links
 
 def filter_links():
     '''
-    This function takes all links from a page
+    Reads the csv file and creates a filtered/clean list 
     '''
-
     links = pd.read_csv("links.csv").squeeze()
 
-    mask_real_links = links.str.contains(pat = 'component')
-    print(links[mask_real_links][1])
+    mask = links.str.contains(pat='component/k2/item/')
+    filtered_links = links[mask]
 
-    return links[mask_real_links]
-
-async def get_titles(session):
-    '''
-    This function takes all links from a page
-    '''
-
-    links = pd.read_csv("links.csv").squeeze()
-
-    mask_real_links = links.str.contains(pat = 'component/k2/item/')
-    filtered_links = links[mask_real_links]
-    #print(links[mask_real_links][:5])
     clean_filtered_links = []
-    df = pd.DataFrame(columns=['link', 'title', 'wr','info'])
+
+    rootpage = "https://www.latinnews.com/"
+
     with open("links_filtered.csv", 'w') as filehandle:
         for item in filtered_links:
-            if item.find("https://www.latinnews.com/https://www.latinnews.com/") and ("full=true" in item)==False:
-                new_item = item.replace("https://www.latinnews.com/https://www.latinnews.com/","https://www.latinnews.com/")
-                filehandle.write(f'{new_item}\n')
-                clean_filtered_links.append(new_item)
-            elif item.find("https://www.latinnews.com/https://www.latinnews.com/https://www.latinnews.com/") and ("full=true" in item)==False:
-                new_item = item.replace("https://www.latinnews.com/https://www.latinnews.com/https://www.latinnews.com/","https://www.latinnews.com/")
-                filehandle.write(f'{new_item}\n')
-                clean_filtered_links.append(new_item)
-            else:
-                if ("full=true" in item)==False:
+            if (("full=true" in item)==False):
+                if item.find(f"{rootpage}{rootpage}"):
+                    new_item = item.replace(f"{rootpage}{rootpage}",f"{rootpage}")
+                    filehandle.write(f'{new_item}\n')
+                    clean_filtered_links.append(new_item)
+                elif item.find(f"{rootpage}{rootpage}{rootpage}"):
+                    new_item = item.replace(f"{rootpage}{rootpage}{rootpage}",f"{rootpage}")
+                    filehandle.write(f'{new_item}\n')
+                    clean_filtered_links.append(new_item)
+                else:
                     filehandle.write(f'{item}\n')
                     clean_filtered_links.append(item)
-    print("\n========================\n")
-    [print(i,link) for i,link in enumerate(clean_filtered_links)]
-    print("\n========================\n")
 
-    sem = asyncio.Semaphore(2)
+    return clean_filtered_links
+
+async def get_titles(session, list_links):
+#    '''
+#    This function takes the information from a page
+#    '''
+    df = pd.DataFrame(columns=['link', 'title', 'wr','info'])
     data = []
-    for count, link in enumerate(clean_filtered_links):#[:3]:    
+    pbar = tqdm(set(list_links))
+    for link in pbar:
+        pbar.set_description(f"Processing link: {link[0:10]}...{link[-10:-1]} ")
+        #print(,flush='True')
+        #pbar.set_description("Processing %s" % char)    
         async with session.get(link) as response:
-            print(count, link)
             #await get_info(session,link)
             #print(link)
             text = await response.text()
             soup = bs(text,"html.parser")
             title = soup.select('title')[0].text.strip()
-            wr = soup.select('h1')[0].text.strip()
+            # sometimes there is a link without the piece of info we want
+            if not soup.select('h1')[0].text.strip():
+                wr = '0'
+            else:
+                wr = soup.select('h1')[0].text.strip()
             info = soup.select('div.itemFullText')[0].text.strip()
 
             #print(f"{link}\n{title}\n{wr}\n{info}")
@@ -82,38 +78,9 @@ async def get_titles(session):
             data.append(dict(zipped))
 
     df = df.append(data, True)
-    df.to_csv('summary-v1.csv')
+    #df = df.
+    df.to_pickle('summary-v1.pkl')
             
-
-def get_title():
-    url="https://www.latinnews.com//component/k2/item/87386.html?archive=33&Itemid=6&cat_id=824689:haiti-crisis-intensifies-as-opposition-makes-good-its-threat"
-    url="https://www.latinnews.com//component/k2/item/87560.html?full=true&archive=33&cat_id=824807:argentina-s-fernandez-seeks-mexican-support-for-axis-of-good"
-    get_url = requests.get(url)
-    get_text = get_url.text
-    soup = bs(get_text, "html.parser")
-    title = soup.select('h1')[0].text.strip()
-    info = soup.select('div.itemFullText')[0].text.strip()
-    print(title,info)
-
-def get_info(url):
-        
-    get_url = requests.get(url)
-    get_text = get_url.text
-    soup = bs(text,"html.parser")
-    title = soup.selec('h1')[0].text.strip()
-    with open("info.csv","w") as filehandle:
-        filehandle.write(f'{title}\n')
-
-#async def get_info(session, site):
-#    try:
-#        async with session.get(url) as response:
-#            text = await response.text()
-#            soup = bs(text,"html.parser")
-#            title = soup.select('h1')[0].text.strip()
-#            info = soup.select('div.itemFullText')[0].text.strip()
-#            with open("info.csv", 'w') as filehandle:
-#                filehandle.write(f'{title}\n')
-#
 async def look_for_sites(session, site, prof=0):
 
     async with session.get(site) as response:
@@ -122,37 +89,31 @@ async def look_for_sites(session, site, prof=0):
         #print(get_all_links(texto))
         links = [link for link in get_all_links(texto)]
 
-        root_page = "https://www.latinnews.com/"
-        [links_acessados.append(f"{root_page}{link}") for link in get_all_links(texto) ]
-            #if link[:11] == "'/component"]
-        #print(links)
+        rootpage = "https://www.latinnews.com/"
+        [links_acessados.append(f"{rootpage}{link}") for link in get_all_links(texto) ]
+
         if prof <= 2:
             i = 1
             for link in links:
                 if i > 2:
                     break
                 if link not in links_acessados:
-                    links_acessados.append(f"{root_page}{link}")
+                    links_acessados.append(f"{rootpage}{link}")
                     n_prof = prof + 1
-                    await look_for_sites(session, f"{root_page}{link}", prof=n_prof)
+                    await look_for_sites(session, f"{rootpage}{link}", prof=n_prof)
                     i = i + 1
 
-        #print(f"{site}\t{texto[:30]}")
         links_acessados.append(site)
         with open("links.csv", 'w') as filehandle:
             for item in links_acessados:
                 filehandle.write(f'{item}\n')
 
-        #print(links)
-#async def main(site):
-#    links_acessados.append(site) 
-#    async with aiohttp.ClientSession() as session:
-#        await look_for_sites(session, site)
- #      await get_titles(session)
-
 async def main():
+    links_acessados.append(site) 
     async with aiohttp.ClientSession() as session:
-        await get_titles(session)
+        await look_for_sites(session, site)
+    async with aiohttp.ClientSession() as session:
+        await get_titles(session,filter_links())
 
 if __name__ == "__main__":
     site = "https://www.latinnews.com/component/k2/itemlist/category/33.html?archive=true&archive_id=33&period=2021"
